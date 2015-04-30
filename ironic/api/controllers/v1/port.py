@@ -31,6 +31,11 @@ from ironic.common import exception
 from ironic.common.i18n import _
 from ironic import objects
 
+# TODO(mariojv) temporary imports for debugging
+from ironic.openstack.common import log
+LOG = log.getLogger(__name__)
+import inspect
+
 
 class PortPatchType(types.JsonPatchType):
 
@@ -49,15 +54,21 @@ class Port(base.APIBase):
     _node_uuid = None
 
     def _get_node_uuid(self):
+        LOG.debug('getter for node_uuid called')
         return self._node_uuid
 
     def _set_node_uuid(self, value):
         if value and self._node_uuid != value:
             try:
+                LOG.debug('SETTING NODE UUID')
+                LOG.debug('CURRENT _node_uuid: ' + str(self._node_uuid))
+                LOG.debug('TRYING TO SET TO value: ' + str(value))
                 # FIXME(comstud): One should only allow UUID here, but
                 # there seems to be a bug in that tests are passing an
                 # ID. See bug #1301046 for more details.
-                node = objects.Node.get(pecan.request.context, value)
+                node = objects.Node.get_by_uuid(pecan.request.context, value)
+                LOG.debug('NODE: ' + str(node))
+                LOG.debug('NODE as_dict: ' + str(node.as_dict()))
                 self._node_uuid = node.uuid
                 # NOTE(lucasagomes): Create the node_id attribute on-the-fly
                 #                    to satisfy the api -> rpc object
@@ -88,6 +99,7 @@ class Port(base.APIBase):
     """A list containing a self link and associated port links"""
 
     def __init__(self, **kwargs):
+        LOG.debug('Creating Port... kwargs: ' + str(kwargs))
         self.fields = []
         fields = list(objects.Port.fields)
         # NOTE(lucasagomes): node_uuid is not part of objects.Port.fields
@@ -99,19 +111,21 @@ class Port(base.APIBase):
                 continue
             self.fields.append(field)
             setattr(self, field, kwargs.get(field, wtypes.Unset))
-
         # NOTE(lucasagomes): node_id is an attribute created on-the-fly
         # by _set_node_uuid(), it needs to be present in the fields so
         # that as_dict() will contain node_id field when converting it
         # before saving it in the database.
         self.fields.append('node_id')
+        LOG.debug('fields: ' + str(fields))
+        LOG.debug('Calling setattr on node_uuid...')
         setattr(self, 'node_uuid', kwargs.get('node_id', wtypes.Unset))
 
     @staticmethod
     def _convert_with_links(port, url, expand=True):
+        LOG.debug('calling _convert_with_links with port: ' + str(port.as_dict()))
+        LOG.debug('expand: ' + str(expand))
         if not expand:
             port.unset_fields_except(['uuid', 'address'])
-
         # never expose the node_id attribute
         port.node_id = wtypes.Unset
 
@@ -121,10 +135,13 @@ class Port(base.APIBase):
                                           'ports', port.uuid,
                                           bookmark=True)
                       ]
+
+        LOG.debug('after convert_with_links: ' + str(port.as_dict()))
         return port
 
     @classmethod
     def convert_with_links(cls, rpc_port, expand=True):
+        LOG.debug('Calling convert_with_links with rpc_port: ' + str(rpc_port.as_dict()))
         port = Port(**rpc_port.as_dict())
         return cls._convert_with_links(port, pecan.request.host_url, expand)
 
@@ -179,6 +196,13 @@ class PortsController(rest.RestController):
     def _get_ports_collection(self, node_ident, address, marker, limit,
                               sort_key, sort_dir, expand=False,
                               resource_url=None):
+        # TODO(mariojv) This is just for debugging
+        frame = inspect.currentframe()
+        args, _, _, values = inspect.getargvalues(frame)
+        LOG.debug('function name "%s"' % inspect.getframeinfo(frame)[2])
+        for i in args:
+            LOG.debug("    %s = %s" % (i, values[i]))
+
         if self.from_nodes and not node_ident:
             raise exception.MissingParameterValue(_(
                   "Node identifier not specified."))
@@ -190,6 +214,7 @@ class PortsController(rest.RestController):
         if marker:
             marker_obj = objects.Port.get_by_uuid(pecan.request.context,
                                                   marker)
+            LOG.debug('market_obj: ' + str(marker_obj))
 
         if node_ident:
             # FIXME(comstud): Since all we need is the node ID, we can
@@ -197,10 +222,13 @@ class PortsController(rest.RestController):
             #                 for that column. This will get cleaned up
             #                 as we move to the object interface.
             node = api_utils.get_rpc_node(node_ident)
+            LOG.debug('node: ' + str(node.as_dict()))
             ports = objects.Port.list_by_node_id(pecan.request.context,
                                                  node.id, limit, marker_obj,
                                                  sort_key=sort_key,
                                                  sort_dir=sort_dir)
+            LOG.debug('ports in _get_ports_collection: ' + str(ports.as_dict()))
+
         elif address:
             ports = self._get_ports_by_address(address)
         else:
@@ -249,7 +277,16 @@ class PortsController(rest.RestController):
         :param sort_key: column to sort results by. Default: id.
         :param sort_dir: direction to sort. "asc" or "desc". Default: asc.
         """
+        LOG.debug('calling get_all')
+        # TODO(mariojv) This is just for debugging
+        frame = inspect.currentframe()
+        args, _, _, values = inspect.getargvalues(frame)
+        LOG.debug('function name "%s"' % inspect.getframeinfo(frame)[2])
+        for i in args:
+            LOG.debug("    %s = %s" % (i, values[i]))
+
         if not node_uuid and node:
+            LOG.debug('node: ' + str(node))
             # We're invoking this interface using positional notation, or
             # explicitly using 'node'.  Try and determine which one.
             # Make sure only one interface, node or node_uuid is used
@@ -281,10 +318,19 @@ class PortsController(rest.RestController):
         :param sort_key: column to sort results by. Default: id.
         :param sort_dir: direction to sort. "asc" or "desc". Default: asc.
         """
+        LOG.debug('calling detail')
+        # TODO(mariojv) This is just for debugging
+        frame = inspect.currentframe()
+        args, _, _, values = inspect.getargvalues(frame)
+        LOG.debug('function name "%s"' % inspect.getframeinfo(frame)[2])
+        for i in args:
+            LOG.debug("    %s = %s" % (i, values[i]))
+
         if not node_uuid and node:
             # We're invoking this interface using positional notation, or
             # explicitly using 'node'.  Try and determine which one.
             # Make sure only one interface, node or node_uuid is used
+            LOG.debug('node: ' + str(node))
             if (not api_utils.allow_node_logical_names() and
                 not uuidutils.is_uuid_like(node)):
                 raise exception.NotAcceptable()
@@ -306,10 +352,12 @@ class PortsController(rest.RestController):
 
         :param port_uuid: UUID of a port.
         """
+        LOG.debug('calling get_one')
+        LOG.debug('port_uuid: ' + str(port_uuid))
         if self.from_nodes:
             raise exception.OperationNotPermitted
-
         rpc_port = objects.Port.get_by_uuid(pecan.request.context, port_uuid)
+        LOG.debug('rpc port as_dict: ' + str(rpc_port.as_dict()))
         return Port.convert_with_links(rpc_port)
 
     @expose.expose(Port, body=Port, status_code=201)
@@ -318,14 +366,20 @@ class PortsController(rest.RestController):
 
         :param port: a port within the request body.
         """
+        LOG.debug('POST! Creating new port in post() fn')
+        LOG.debug('port argument: ' + str(port))
+        LOG.debug('port as_dict: ' + str(port.as_dict()))
         if self.from_nodes:
             raise exception.OperationNotPermitted
 
         new_port = objects.Port(pecan.request.context,
                                 **port.as_dict())
+        LOG.debug('new port: ' + str(new_port.as_dict()))
         new_port.create()
+        LOG.debug('new port created')
         # Set the HTTP Location Header
         pecan.response.location = link.build_url('ports', new_port.uuid)
+        LOG.debug('calling convert with links')
         return Port.convert_with_links(new_port)
 
     @wsme.validate(types.uuid, [PortPatchType])
@@ -336,18 +390,23 @@ class PortsController(rest.RestController):
         :param port_uuid: UUID of a port.
         :param patch: a json PATCH document to apply to this port.
         """
+        LOG.debug('patching port')
+        LOG.debug('port_uuid: ' + str(port_uuid))
         if self.from_nodes:
             raise exception.OperationNotPermitted
 
         rpc_port = objects.Port.get_by_uuid(pecan.request.context, port_uuid)
         try:
             port_dict = rpc_port.as_dict()
+            LOG.debug('rpc port_dict: ' + str(port_dict))
             # NOTE(lucasagomes):
             # 1) Remove node_id because it's an internal value and
             #    not present in the API object
             # 2) Add node_uuid
             port_dict['node_uuid'] = port_dict.pop('node_id', None)
+            LOG.debug('port_dict after removing node id: ' + str(port_dict))
             port = Port(**api_utils.apply_jsonpatch(port_dict, patch))
+            LOG.debug('port after applying patch: ' + str(port.as_dict()))
         except api_utils.JSONPATCH_EXCEPTIONS as e:
             raise exception.PatchError(patch=patch, reason=e)
 
@@ -362,14 +421,16 @@ class PortsController(rest.RestController):
                 patch_val = None
             if rpc_port[field] != patch_val:
                 rpc_port[field] = patch_val
-
+        LOG.debug('rpc port after changing fields: ' + str(rpc_port.as_dict()))
         rpc_node = objects.Node.get_by_id(pecan.request.context,
                                           rpc_port.node_id)
+        LOG.debug('rpc_node: ' + str(rpc_node.as_dict()))
         topic = pecan.request.rpcapi.get_topic_for(rpc_node)
 
+        LOG.debug('WARNING did not remove rpc_node.node_id before updating')
         new_port = pecan.request.rpcapi.update_port(
                                         pecan.request.context, rpc_port, topic)
-
+        LOG.debug('new port: ' + str(new_port))
         return Port.convert_with_links(new_port)
 
     @expose.expose(None, types.uuid, status_code=204)
@@ -378,12 +439,15 @@ class PortsController(rest.RestController):
 
         :param port_uuid: UUID of a port.
         """
+        LOG.debug('deleting port: ' + str(port_uuid))
         if self.from_nodes:
             raise exception.OperationNotPermitted
         rpc_port = objects.Port.get_by_uuid(pecan.request.context,
                                             port_uuid)
+        LOG.debug('rpc_port: ' + str(rpc_port.as_dict()))
         rpc_node = objects.Node.get_by_id(pecan.request.context,
                                           rpc_port.node_id)
+        LOG.debug('rpc_node: ' + str(rpc_node.as_dict()))
         topic = pecan.request.rpcapi.get_topic_for(rpc_node)
         pecan.request.rpcapi.destroy_port(pecan.request.context,
                                           rpc_port, topic)

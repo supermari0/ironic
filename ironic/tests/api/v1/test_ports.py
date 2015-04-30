@@ -40,6 +40,7 @@ from ironic.tests.objects import utils as obj_utils
 
 # NOTE(lucasagomes): When creating a port via API (POST)
 #                    we have to use node_uuid
+# TODO(mariojv) this is fishy
 def post_get_test_port(**kw):
     port = apiutils.port_post_data(**kw)
     node = dbutils.get_test_node()
@@ -209,6 +210,8 @@ class TestListPorts(api_base.FunctionalTest):
             (self.node.uuid, 'node-name'))
         mock_get_rpc_node.assert_called_once_with(self.node.uuid)
 
+    # TODO(mariojv) verify that this is expected behavior when comparing with
+    # fn on like 187
     @mock.patch.object(api_utils, 'get_rpc_node')
     def test_get_all_by_node_name_not_supported(self, mock_get_rpc_node):
         # GET /v1/ports specifying node_name - name not supported
@@ -245,6 +248,7 @@ class TestListPorts(api_base.FunctionalTest):
         self.assertEqual(0, mock_get_rpc_node.call_count)
         self.assertEqual(406, data.status_int)
 
+    # TODO(mariojv) what is this doing?
     @mock.patch.object(api_port.PortsController, '_get_ports_collection')
     def test_detail_with_incorrect_api_usage(self, mock_gpc):
         # GET /v1/ports/detail specifying node and node_uuid.  In this case
@@ -657,6 +661,7 @@ class TestPost(api_base.FunctionalTest):
         self.assertEqual(400, response.status_int)
         self.assertTrue(response.json['error_message'])
 
+    # TODO(mariojv) may be problems here
     def test_node_uuid_to_node_id_mapping(self):
         pdict = post_get_test_port(node_uuid=self.node['uuid'])
         self.post_json('/ports', pdict)
@@ -706,6 +711,7 @@ class TestDelete(api_base.FunctionalTest):
         self.assertEqual('application/json', response.content_type)
         self.assertIn(self.port.address, response.json['error_message'])
 
+    # TODO(mariojv) why do we expect errors here?
     def test_delete_port_byid(self, mock_dpt):
         self.delete('/ports/%s' % self.port.uuid,
                                expect_errors=True)
