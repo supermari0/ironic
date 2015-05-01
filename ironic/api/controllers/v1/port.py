@@ -70,7 +70,7 @@ class Port(base.APIBase):
                 # FIXME(comstud): One should only allow UUID here, but
                 # there seems to be a bug in that tests are passing an
                 # ID. See bug #1301046 for more details.
-                node = objects.Node.get(pecan.request.context, value)
+                node = objects.Node.get_by_uuid(pecan.request.context, value)
                 LOG.debug('NODE: ' + str(node))
                 LOG.debug('NODE as_dict: ' + str(node.as_dict()))
                 self._node_uuid = node.uuid
@@ -130,7 +130,7 @@ class Port(base.APIBase):
         self.fields.append('node_id')
         LOG.debug('fields: ' + str(fields))
         LOG.debug('Calling setattr on node_uuid...')
-        setattr(self, 'node_uuid', kwargs.get('node_id', wtypes.Unset))
+        setattr(self, 'node_uuid', kwargs.get('node_uuid', wtypes.Unset))
 
     @staticmethod
     def _convert_with_links(port, url, expand=True):
@@ -154,6 +154,14 @@ class Port(base.APIBase):
     @classmethod
     def convert_with_links(cls, rpc_port, expand=True):
         LOG.debug('Calling convert_with_links with rpc_port: ' + str(rpc_port.as_dict()))
+        # NOTE(mariojv): Ports retrieved via rpc do not have a node UUID which
+        # is needed in the Port constructor, so retrieve that node from the DB
+        # to figure out its UUID.
+        node = objects.Node.get_by_id(pecan.request.context, rpc_port.node_id)
+        LOG.debug('node retrieved in convert_with_links: ' + str(node))
+        LOG.debug('node as_dict: ' + str(node.as_dict()))
+        rpc_port.node_uuid = node.uuid
+        LOG.debug('rpc_port after attaching node_uuid: ' + str(rpc_port.as_dict()))
         port = Port(**rpc_port.as_dict())
         return cls._convert_with_links(port, pecan.request.host_url, expand)
 
