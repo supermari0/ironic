@@ -35,6 +35,7 @@ from ironic import objects
 from ironic.openstack.common import log
 LOG = log.getLogger(__name__)
 import inspect
+import traceback
 
 
 class PortPatchType(types.JsonPatchType):
@@ -58,15 +59,18 @@ class Port(base.APIBase):
         return self._node_uuid
 
     def _set_node_uuid(self, value):
+        LOG.debug('SETTING NODE UUID')
+        LOG.debug('self: ' + str(self))
+        if self.fields:
+            LOG.debug('self as_dict: ' + str(self.as_dict()))
         if value and self._node_uuid != value:
             try:
-                LOG.debug('SETTING NODE UUID')
                 LOG.debug('CURRENT _node_uuid: ' + str(self._node_uuid))
                 LOG.debug('TRYING TO SET TO value: ' + str(value))
                 # FIXME(comstud): One should only allow UUID here, but
                 # there seems to be a bug in that tests are passing an
                 # ID. See bug #1301046 for more details.
-                node = objects.Node.get_by_uuid(pecan.request.context, value)
+                node = objects.Node.get(pecan.request.context, value)
                 LOG.debug('NODE: ' + str(node))
                 LOG.debug('NODE as_dict: ' + str(node.as_dict()))
                 self._node_uuid = node.uuid
@@ -80,6 +84,7 @@ class Port(base.APIBase):
                 e.code = 400  # BadRequest
                 raise e
         elif value == wtypes.Unset:
+            LOG.debug('Value is unset. Unsetting node UUID.')
             self._node_uuid = wtypes.Unset
 
     uuid = types.uuid
@@ -100,6 +105,12 @@ class Port(base.APIBase):
 
     def __init__(self, **kwargs):
         LOG.debug('Creating Port... kwargs: ' + str(kwargs))
+        LOG.debug('Trace below:')
+        tb = traceback.extract_stack()
+        formatted = traceback.format_list(tb)
+        for line in formatted:
+            LOG.debug(line)
+        LOG.debug('self: ' + str(self))
         self.fields = []
         fields = list(objects.Port.fields)
         # NOTE(lucasagomes): node_uuid is not part of objects.Port.fields
@@ -111,6 +122,7 @@ class Port(base.APIBase):
                 continue
             self.fields.append(field)
             setattr(self, field, kwargs.get(field, wtypes.Unset))
+        LOG.debug('self as_dict after modifying fields: ' + str(self.as_dict()))
         # NOTE(lucasagomes): node_id is an attribute created on-the-fly
         # by _set_node_uuid(), it needs to be present in the fields so
         # that as_dict() will contain node_id field when converting it
