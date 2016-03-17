@@ -22,6 +22,7 @@ from ironic.common.i18n import _
 from ironic.db import api as db_api
 from ironic.objects import base
 from ironic.objects import fields as object_fields
+from ironic.objects import notification
 
 REQUIRED_INT_PROPERTIES = ['local_gb', 'cpus', 'memory_mb']
 
@@ -364,3 +365,59 @@ class Node(base.IronicObject, object_base.VersionedObjectDictCompat):
     def touch_provisioning(self, context=None):
         """Touch the database record to mark the provisioning as alive."""
         self.dbapi.touch_node_provisioning(self.id)
+
+
+@base.IronicObjectRegistry.register
+class NodeSetPowerStateNotification(notification.NotificationBase):
+    """Notification for when Ironic changes the power state."""
+    # Version 1.0: Initial version
+    VERSION = '1.0'
+
+    fields = {
+        'payload': object_fields.ObjectField('NodeSetPowerStatePayload')
+    }
+
+
+@base.IronicObjectRegistry.register
+class NodeSetPowerStatePayload(notification.NotificationPayloadBase):
+    SCHEMA = {
+        'uuid': ('node', 'uuid'),
+        'power_state': ('node', 'power_state'),
+    }
+    # Version 1.0: Initial version
+    VERSION = '1.0'
+
+    fields = {
+        'uuid': object_fields.UUIDField(),
+        'power_state': object_fields.StringField(nullable=True),
+        # target_power_state is not in SCHEMA because we send the notification
+        # about change in power state before the Node object is updated
+        'target_power_state': object_fields.StringField(nullable=True)
+    }
+
+
+@base.IronicObjectRegistry.register
+class NodeSyncPowerStatePayload(notification.NotificationPayloadBase):
+    SCHEMA = {
+        'uuid': ('node', 'uuid'),
+        'power_state': ('node', 'power_state')
+    }
+    # Version 1.0: Initial version
+    fields = {
+        'uuid': object_fields.UUIDField(),
+        'power_state': object_fields.StringField(nullable=True)
+    }
+
+
+@base.IronicObjectRegistry.register
+class NodeSyncPowerStateNotification(notification.NotificationBase):
+    """Notification for when power state changed or error occurred during sync.
+
+    """
+
+    # Version 1.0: Initial version
+    VERSION = '1.0'
+
+    fields = {
+        'payload': object_fields.ObjectField('NodeSyncPowerStatePayload')
+    }

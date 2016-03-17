@@ -12,6 +12,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from oslo_config import cfg
 from oslo_log import log
 from oslo_utils import excutils
 
@@ -22,8 +23,12 @@ from ironic.common.i18n import _LI
 from ironic.common.i18n import _LW
 from ironic.common import states
 from ironic.conductor import task_manager
+from ironic.objects import fields
+from ironic.objects import node as node_objects
+from ironic.objects import notification
 
 LOG = log.getLogger(__name__)
+CONF = cfg.CONF
 
 CLEANING_INTERFACE_PRIORITY = {
     # When two clean steps have the same priority, their order is determined
@@ -35,6 +40,51 @@ CLEANING_INTERFACE_PRIORITY = {
     'deploy': 2,
     'raid': 1,
 }
+
+
+def emit_set_power_notif(context, node, target_power_state, host, priority,
+                         phase):
+    """Helper for conductor sending a set power state notification.
+
+    :param context: Request context.
+    :param node: Node the power is being set on.
+    :param target_power_state: Power state being set.
+    :param host: Conductor host setting the power state.
+    :param priority: One of fields.NotificationPriority.
+    :param phase: "start", "end", or "fail"
+    """
+    payload = node_objects.NodeSetPowerStatePayload(
+        target_power_state=target_power_state)
+    payload.populate_schema(node=node)
+    node_objects.NodeSetPowerStateNotification(
+        publisher=notification.NotificationPublisher(
+            service='conductor', host=host),
+        event_type=notification.EventType(
+            object='node', action='set_power_state', phase=phase),
+        priority=priority,
+        payload=payload).emit(context)
+
+
+def emit_sync_power_notif(context, node, priority, phase=None):
+    """Helper for conductor sending a sync power state notification.
+
+    :param context: Request context.
+    :param node: Node being synced.
+    :param host: Conductor host syncing the power state.
+    :param priority: One of fields.NotificationPriority.
+    :param phase: None or "fail". None indicates a successful sync. "fail"
+                  indicates that we couldn't retrieve power state for this
+                  node.
+    """
+    payload = node_objects.NodeSyncPowerStatePayload()
+    payload.populate_schema(node=node)
+    node_objects.NodeSyncPowerStateNotification(
+        publisher=notification.NotificationPublisher(
+            service='conductor', host=CONF.host),
+        event_type=notification.EventType(
+            object='node', action='sync_power_state', phase=phase),
+        priority=priority,
+        payload=payload).emit(context)
 
 
 @task_manager.require_exclusive_lock
@@ -84,6 +134,9 @@ def node_power_action(task, new_state):
                     "Failed to change power state to '%(target)s'. "
                     "Error: %(error)s") % {'target': new_state, 'error': e}
                 node['target_power_state'] = states.NOSTATE
+                emit_set_power_notif(task.context, task.node, states.NOSTATE,
+                                     CONF.host,
+                                     fields.NotificationPriority.ERROR, 'fail')
                 node.save()
 
         if curr_state == new_state:
@@ -101,10 +154,13 @@ def node_power_action(task, new_state):
             node['power_state'] = new_state
             node['target_power_state'] = states.NOSTATE
             node.save()
-            LOG.warning(_LW("Not going to change node %(node)s power "
-                            "state because current state = requested state "
-                            "= '%(state)s'."),
-                        {'node': node.uuid, 'state': curr_state})
+            emit_set_power_notif(task.context, task.node, states.NOSTATE,
+                                 CONF.host,
+                                 fields.NotificationPriority.WARN, 'end')
+            LOG.warning(_LW("Not going to change node %(node)s power state "
+                            "because current state = requested state = "
+                            "'%(state)s'."),
+                            {'node': node.uuid, 'state': curr_state})
             return
 
         if curr_state == states.ERROR:
@@ -128,12 +184,18 @@ def node_power_action(task, new_state):
             task.driver.power.reboot(task)
     except Exception as e:
         with excutils.save_and_reraise_exception():
+            emit_set_power_notif(task.context, task.node, states.NOSTATE,
+                                 CONF.host,
+                                 fields.NotificationPriority.ERROR, 'fail')
             node['last_error'] = _(
                 "Failed to change power state to '%(target)s'. "
                 "Error: %(error)s") % {'target': target_state, 'error': e}
     else:
         # success!
         node['power_state'] = target_state
+        emit_set_power_notif(task.context, task.node, states.NOSTATE,
+                             CONF.host,
+                             fields.NotificationPriority.INFO, 'end')
         LOG.info(_LI('Successfully set node %(node)s power state to '
                      '%(state)s.'),
                  {'node': node.uuid, 'state': target_state})
@@ -243,26 +305,29 @@ def spawn_cleaning_error_handler(e, node):
                         "cleaning on node %(node)s"), {'node': node.uuid})
 
 
-def power_state_error_handler(e, node, power_state):
+def power_state_error_handler(e, task):
     """Set the node's power states if error occurs.
 
     This hook gets called upon an exception being raised when spawning
     the worker thread to change the power state of a node.
 
     :param e: the exception object that was raised.
-    :param node: an Ironic node object.
-    :param power_state: the power state to set on the node.
+    :param task: a TaskManager instance with the request context and the node
+                 whose power state was being changed
 
     """
     if isinstance(e, exception.NoFreeConductorWorker):
-        node.power_state = power_state
-        node.target_power_state = states.NOSTATE
-        node.last_error = (_("No free conductor workers available"))
-        node.save()
+        task.node.target_power_state = states.NOSTATE
+        task.node.last_error = (_("No free conductor workers available"))
+        task.node.save()
         LOG.warning(_LW("No free conductor workers available to perform "
-                        "an action on node %(node)s, setting node's "
-                        "power state back to %(power_state)s."),
-                    {'node': node.uuid, 'power_state': power_state})
+                        "an action on node %(node)s, keeping node's "
+                        "power state as %(power_state)s."),
+                    {'node': task.node.uuid,
+                     'power_state': task.node.power_state})
+    emit_set_power_notif(task.context, task.node, states.NOSTATE,
+                         CONF.host,
+                         fields.NotificationPriority.ERROR, 'fail')
 
 
 def _step_key(step):

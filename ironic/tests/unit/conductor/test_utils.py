@@ -552,6 +552,14 @@ class ErrorHandlersTestCase(tests_base.TestCase):
         self.task.driver = mock.Mock(spec_set=['deploy'])
         self.task.node = mock.Mock(spec_set=objects.Node)
         self.node = self.task.node
+        # NOTE(mariojv) Some of the test cases that use the task below require
+        # strict typing of the node power state fields and would fail if passed
+        # a Mock object in constructors. A task context is also required for
+        # notifications.
+        power_attrs = {'power_state': states.POWER_OFF,
+                       'target_power_state': states.POWER_ON}
+        self.node.configure_mock(**power_attrs)
+        self.task.context = self.context
 
     @mock.patch.object(conductor_utils, 'LOG')
     def test_provision_error_handler_no_worker(self, log_mock):
@@ -638,9 +646,9 @@ class ErrorHandlersTestCase(tests_base.TestCase):
     @mock.patch.object(conductor_utils, 'LOG')
     def test_power_state_error_handler_no_worker(self, log_mock):
         exc = exception.NoFreeConductorWorker()
-        conductor_utils.power_state_error_handler(exc, self.node, 'newstate')
+        conductor_utils.power_state_error_handler(exc, self.task)
         self.node.save.assert_called_once_with()
-        self.assertEqual('newstate', self.node.power_state)
+        self.assertEqual(states.POWER_OFF, self.node.power_state)
         self.assertEqual(states.NOSTATE, self.node.target_power_state)
         self.assertIn('No free conductor workers', self.node.last_error)
         self.assertTrue(log_mock.warning.called)
@@ -648,6 +656,6 @@ class ErrorHandlersTestCase(tests_base.TestCase):
     @mock.patch.object(conductor_utils, 'LOG')
     def test_power_state_error_handler_other_error(self, log_mock):
         exc = Exception('foo')
-        conductor_utils.power_state_error_handler(exc, self.node, 'foo')
+        conductor_utils.power_state_error_handler(exc, self.task)
         self.assertFalse(self.node.save.called)
         self.assertFalse(log_mock.warning.called)
