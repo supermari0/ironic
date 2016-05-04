@@ -18,11 +18,25 @@ import oslo_messaging as messaging
 
 from ironic.common import context as ironic_context
 from ironic.common import exception
+from ironic.common.i18n import _
+from ironic.objects import fields as ironic_fields
 
 
 CONF = cfg.CONF
+notification_opts = [
+    cfg.StrOpt('notification_priority',
+               choices=list(
+                   ironic_fields.NotificationPriority.ALL).append(None),
+               help=_('Specifies the minimum priority for which to send '
+                      'notifications. A value of "None" indicates that no '
+                      'notifications will be sent.'))
+]
+CONF.register_opts(notification_opts)
+
 TRANSPORT = None
-NOTIFIER = None
+NOTIFICATION_TRANSPORT = None
+METRICS_NOTIFIER = None
+VERSIONED_NOTIFIER = None
 
 ALLOWED_EXMODS = [
     exception.__name__,
@@ -42,21 +56,42 @@ TRANSPORT_ALIASES = {
 
 
 def init(conf):
-    global TRANSPORT, NOTIFIER
+    global TRANSPORT, NOTIFICATION_TRANSPORT
+    global METRICS_NOTIFIER, VERSIONED_NOTIFIER
     exmods = get_allowed_exmods()
     TRANSPORT = messaging.get_transport(conf,
                                         allowed_remote_exmods=exmods,
                                         aliases=TRANSPORT_ALIASES)
+    NOTIFICATION_TRANSPORT = messaging.get_notification_transport(
+        conf, allowed_remote_exmods=exmods, aliases=TRANSPORT_ALIASES)
+
     serializer = RequestContextSerializer(messaging.JsonPayloadSerializer())
-    NOTIFIER = messaging.Notifier(TRANSPORT, serializer=serializer)
+    # Notifier used for sending metrics to Ceilometer
+    METRICS_NOTIFIER = messaging.Notifier(TRANSPORT, serializer=serializer)
+
+    if conf.notification_priority is None:
+        VERSIONED_NOTIFIER = messaging.Notifier(NOTIFICATION_TRANSPORT,
+                                                serializer=serializer,
+                                                driver='noop')
+    else:
+        # TODO(mariojv) What is the default topic? Not sure if that's
+        # necessary.
+        VERSIONED_NOTIFIER = messaging.Notifier(NOTIFICATION_TRANSPORT,
+                                                serializer=serializer,
+                                                topic='notification')
 
 
 def cleanup():
-    global TRANSPORT, NOTIFIER
+    global TRANSPORT, NOTIFICATION_TRANSPORT
+    global METRICS_NOTIFIER, VERSIONED_NOTIFIER
     assert TRANSPORT is not None
-    assert NOTIFIER is not None
+    assert NOTIFICATION_TRANSPORT is not None
+    assert METRICS_NOTIFIER is not None
+    assert VERSIONED_NOTIFIER is not None
     TRANSPORT.cleanup()
-    TRANSPORT = NOTIFIER = None
+    NOTIFICATION_TRANSPORT.cleanup()
+    TRANSPORT = NOTIFICATION_TRANSPORT = None
+    METRICS_NOTIFIER = VERSIONED_NOTIFIER = None
 
 
 def set_defaults(control_exchange):
@@ -120,8 +155,13 @@ def get_server(target, endpoints, serializer=None):
                                     serializer=serializer)
 
 
-def get_notifier(service=None, host=None, publisher_id=None):
-    assert NOTIFIER is not None
+def get_metrics_notifier(service=None, host=None, publisher_id=None):
+    assert METRICS_NOTIFIER is not None
     if not publisher_id:
         publisher_id = "%s.%s" % (service, host or CONF.host)
-    return NOTIFIER.prepare(publisher_id=publisher_id)
+    return METRICS_NOTIFIER.prepare(publisher_id=publisher_id)
+
+
+def get_versioned_notifier(publisher_id=None):
+    assert VERSIONED_NOTIFIER is not None
+    return VERSIONED_NOTIFIER.prepare(publisher_id=publisher_id)

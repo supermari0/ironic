@@ -65,7 +65,7 @@ class BaseConductorManager(object):
             host = CONF.host
         self.host = host
         self.topic = topic
-        self.notifier = rpc.get_notifier()
+        self.metrics_notifier = rpc.get_metrics_notifier()
         self._started = False
 
     def init_host(self, admin_context=None):

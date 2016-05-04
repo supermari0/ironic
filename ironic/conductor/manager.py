@@ -1854,8 +1854,8 @@ class ConductorManager(base_manager.BaseConductorManager):
                 message['payload'] = (
                     self._filter_out_unsupported_types(sensors_data))
                 if message['payload']:
-                    self.notifier.info(context, "hardware.ipmi.metrics",
-                                       message)
+                    self.metrics_notifier.info(
+                        context, "hardware.ipmi.metrics", message)
             finally:
                 # Yield on every iteration
                 eventlet.sleep(0)

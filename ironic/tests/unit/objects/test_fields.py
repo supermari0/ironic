@@ -61,3 +61,18 @@ class TestFlexibleDictField(test_base.TestCase):
         # nullable
         self.field = fields.FlexibleDictField(nullable=True)
         self.assertEqual({}, self.field.coerce('obj', 'attr', None))
+
+
+class TestNotificationPriorityField(test_base.TestCase):
+
+    def setUp(self):
+        super(TestNotificationPriorityField, self).setUp()
+        self.field = fields.NotificationPriorityField()
+
+    def test_coerce_good_value(self):
+        self.assertEqual(fields.NotificationPriority.WARN,
+                         self.field.coerce('obj', 'attr', 'warn'))
+
+    def test_coerce_bad_value(self):
+        self.assertRaises(ValueError, self.field.coerce, 'obj', 'attr',
+                          'not_a_priority')

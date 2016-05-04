@@ -114,6 +114,16 @@
 
 
 #
+# Options defined in ironic.common.rpc
+#
+
+# Specifies the minimum priority for which to send
+# notifications. A value of "None" indicates that no
+# notifications will be sent. (string value)
+#notification_priority=<None>
+
+
+#
 # Options defined in ironic.common.service
 #
 

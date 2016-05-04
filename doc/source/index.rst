@@ -65,6 +65,7 @@ Developer's Guide
   dev/code-contribution-guide
   dev/dev-quickstart
   dev/vendor-passthru
+  dev/notifications
   dev/faq
 
 Indices and tables
