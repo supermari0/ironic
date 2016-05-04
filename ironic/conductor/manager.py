@@ -69,6 +69,7 @@ from ironic.conductor import task_manager
 from ironic.conductor import utils
 from ironic import objects
 from ironic.objects import base as objects_base
+from ironic.objects import fields
 
 MANAGER_TOPIC = 'ironic.conductor_manager'
 
@@ -255,6 +256,10 @@ class ConductorManager(base_manager.BaseConductorManager):
 
         with task_manager.acquire(context, node_id, shared=False,
                                   purpose='changing node power state') as task:
+            utils.emit_set_power_notif(
+                context, task.node, new_state, self.host,
+                fields.NotificationPriority.INFO, 'start')
+
             task.driver.power.validate(task)
             # Set the target_power_state and clear any last_error, since we're
             # starting a new operation. This will expose to other processes
@@ -266,7 +271,7 @@ class ConductorManager(base_manager.BaseConductorManager):
             task.node.last_error = None
             task.node.save()
             task.set_spawn_error_hook(utils.power_state_error_handler,
-                                      task.node, task.node.power_state)
+                                      task)
             task.spawn_after(self._spawn_worker, utils.node_power_action,
                              task, new_state)
 
@@ -2361,6 +2366,8 @@ def handle_sync_power_state_max_retries_exceeded(task, actual_power_state,
     node.maintenance = True
     node.maintenance_reason = msg
     node.save()
+    utils.emit_sync_power_notif(task.context, node,
+                                fields.NotificationPriority.ERROR, 'fail')
     LOG.error(msg)
 
 
@@ -2400,7 +2407,9 @@ def do_sync_power_state(task, count):
                 _("Power driver returned ERROR state "
                   "while trying to sync power state."))
     except Exception as e:
-        # Stop if any exception is raised when getting the power state
+        # Stop if any exception is raised when getting the power state. We
+        # notify about the power state sync in the max retries handler to avoid
+        # spamming notifications if the sync eventually succeeds.
         if count > max_retries:
             task.upgrade_lock()
             handle_sync_power_state_max_retries_exceeded(task, power_state,
@@ -2431,13 +2440,15 @@ def do_sync_power_state(task, count):
         return 0
     elif node.power_state is None:
         # If node has no prior state AND we successfully got a state,
-        # simply record that.
+        # simply record that and send a notification.
         LOG.info(_LI("During sync_power_state, node %(node)s has no "
                      "previous known state. Recording current state "
                      "'%(state)s'."),
                  {'node': node.uuid, 'state': power_state})
         node.power_state = power_state
         node.save()
+        utils.emit_sync_power_notif(task.context, node,
+                                    fields.NotificationPriority.INFO)
         return 0
 
     if count > max_retries:
@@ -2453,6 +2464,9 @@ def do_sync_power_state(task, count):
         try:
             # node_power_action will update the node record
             # so don't do that again here.
+            utils.emit_set_power_notif(
+                task.context, node, node.power_state, CONF.host,
+                fields.NotificationPriority.INFO, 'start')
             utils.node_power_action(task, node.power_state)
         except Exception as e:
             LOG.error(_LE(
@@ -2470,6 +2484,8 @@ def do_sync_power_state(task, count):
                      'state': node.power_state})
         node.power_state = power_state
         node.save()
+        utils.emit_sync_power_notif(task.context, node,
+                                    fields.NotificationPriority.WARN)
 
     return count
 

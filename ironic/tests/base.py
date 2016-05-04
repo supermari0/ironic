@@ -219,3 +219,23 @@ class TestCase(testtools.TestCase):
             # reading the error messages less confusing.
             raise testtools.matchers.MismatchError(
                 observed, expected, inner_mismatch, verbose=True)
+
+    def assertNotificationEqual(self, notif_args, service, host, event_type,
+                                priority):
+        """Asserts properties of arguments passed when creating a notification.
+
+           :param notif_args: dict of arguments notification instantiated with
+           :param service: expected service that emits the notification
+           :param host: expected host that emits the notification
+           :param event_type: expected value of EventType field of notification
+                              as a string
+           :param priority: expected NotificationPriority
+           # TODO(mariojv) implement the payload args
+           :param payload_args: expected keys and values of the notification
+                                payload
+       """
+        self.assertEqual(notif_args['publisher'].service, service)
+        self.assertEqual(notif_args['publisher'].host, host)
+        self.assertEqual(notif_args['event_type'].
+                         to_notification_event_type_field(), event_type)
+        self.assertEqual(notif_args['priority'], priority)

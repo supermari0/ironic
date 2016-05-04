@@ -412,6 +412,10 @@ expected_object_fingerprints = {
     'Conductor': '1.1-5091f249719d4a465062a1b3dc7f860d',
     'EventType': '1.0-3daeec50c6deb956990255f92b863333',
     'NotificationPublisher': '1.0-51a09397d6c0687771fb5be9a999605d',
+    'NodeSetPowerStateNotification': '1.0-ec257f1d38c293e848e14bdd2cc5e886',
+    'NodeSetPowerStatePayload': '1.0-bd0eefd93c1d5243b4390f55a0740026',
+    'NodeSyncPowerStateNotification': '1.0-ec257f1d38c293e848e14bdd2cc5e886',
+    'NodeSyncPowerStatePayload': '1.0-4108fbdd367e5bf089d14664f00cdcc3'
 }
 
 
