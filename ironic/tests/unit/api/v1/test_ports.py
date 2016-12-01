@@ -1062,6 +1062,14 @@ class TestPost(test_api_base.BaseApiTest):
         self.assertEqual(http_client.BAD_REQUEST, response.status_int)
         self.assertTrue(response.json['error_message'])
 
+    def test_create_port_node_name_not_found(self):
+        pdict = post_get_test_port(
+            node_name='node-1')
+        response = self.post_json('/ports', pdict, expect_errors=True)
+        self.assertEqual('application/json', response.content_type)
+        self.assertEqual(http_client.NOT_ACCEPTABLE, response.status_int)
+        self.assertTrue(response.json['error_message'])
+
     def test_create_port_portgroup_uuid_not_found(self):
         pdict = post_get_test_port(
             portgroup_uuid='1a1a1a1a-2b2b-3c3c-4d4d-5e5e5e5e5e5e')

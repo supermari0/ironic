@@ -16,6 +16,7 @@
 import datetime
 
 from ironic_lib import metrics_utils
+from oslo_log import log
 from oslo_utils import uuidutils
 import pecan
 from pecan import rest
@@ -34,8 +35,9 @@ from ironic.common.i18n import _
 from ironic.common import policy
 from ironic import objects
 
-METRICS = metrics_utils.get_metrics_logger(__name__)
+LOG = log.getLogger(__name__)
 
+METRICS = metrics_utils.get_metrics_logger(__name__)
 
 _DEFAULT_RETURN_FIELDS = ('uuid', 'address')
 
@@ -63,6 +65,7 @@ class Port(base.APIBase):
 
     _node_uuid = None
     _portgroup_uuid = None
+    _node_name = None
 
     def _get_node_uuid(self):
         return self._node_uuid
@@ -79,6 +82,9 @@ class Port(base.APIBase):
                 #                    to satisfy the api -> rpc object
                 #                    conversion.
                 self.node_id = node.id
+                # Adding the value to _node_name as well to avoid multiple
+                # db access
+                self._node_name = node.name
             except exception.NodeNotFound as e:
                 # Change error code because 404 (NotFound) is inappropriate
                 # response for a POST request to create a Port
@@ -117,6 +123,29 @@ class Port(base.APIBase):
             # This is to output portgroup_uuid field if API version allows this
             self._portgroup_uuid = None
 
+    def _get_node_name(self):
+        return self._node_name
+
+    def _set_node_name(self, value):
+        if value and self._node_name != value:
+            if not api_utils.allow_node_name():
+                LOG.warning("The current version do not support logical names."
+                            "Please use node_uuid in the request body.")
+                raise exception.NotAcceptable()
+            else:
+                try:
+                    node = objects.Node.get(pecan.request.context, value)
+                    self._node_name = node.name
+                    self.node_id = node.id
+                    # Adding a value to _node_uuid as well to avoid multiple
+                    # db access
+                    self._node_uuid = node.uuid
+                except exception.NodeNotFound as e:
+                    e.code = http_client.BAD_REQUEST
+                    raise
+        elif value == wtypes.Unset:
+            self._node_name = wtypes.Unset
+
     uuid = types.uuid
     """Unique UUID for this port"""
 
@@ -129,13 +158,14 @@ class Port(base.APIBase):
     internal_info = wsme.wsattr({wtypes.text: types.jsontype}, readonly=True)
     """This port's internal information maintained by ironic"""
 
-    node_uuid = wsme.wsproperty(types.uuid, _get_node_uuid, _set_node_uuid,
-                                mandatory=True)
+    node_uuid = wsme.wsproperty(types.uuid, _get_node_uuid, _set_node_uuid)
     """The UUID of the node this port belongs to"""
 
     portgroup_uuid = wsme.wsproperty(types.uuid, _get_portgroup_uuid,
                                      _set_portgroup_uuid, mandatory=False)
     """The UUID of the portgroup this port belongs to"""
+    node_name = wsme.wsproperty(wtypes.text, _get_node_name, _set_node_name)
+    """The logical name of the node this port belongs to"""
 
     pxe_enabled = types.boolean
     """Indicates whether pxe is enabled or disabled on the node."""

@@ -83,11 +83,12 @@ MINOR_22_LOOKUP_HEARTBEAT = 22
 MINOR_23_PORTGROUPS = 23
 MINOR_24_PORTGROUPS_SUBCONTROLLERS = 24
 MINOR_25_UNSET_CHASSIS_UUID = 25
+MINOR_26_NODENAME = 26
 
 # When adding another version, update MINOR_MAX_VERSION and also update
 # doc/source/dev/webapi-version-history.rst with a detailed explanation of
 # what the version has changed.
-MINOR_MAX_VERSION = MINOR_25_UNSET_CHASSIS_UUID
+MINOR_MAX_VERSION = MINOR_26_NODENAME
 
 # String representations of the minor and maximum versions
 MIN_VERSION_STRING = '{}.{}'.format(BASE_VERSION, MINOR_1_INITIAL_VERSION)

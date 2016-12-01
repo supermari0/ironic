@@ -19,6 +19,7 @@ from oslo_versionedobjects import base as object_base
 
 from ironic.common import exception
 from ironic.common.i18n import _
+from ironic.common import utils
 from ironic.db import api as db_api
 from ironic.objects import base
 from ironic.objects import fields as object_fields
@@ -167,6 +168,8 @@ class Node(base.IronicObject, object_base.VersionedObjectDictCompat):
             return cls.get_by_id(context, node_id)
         elif uuidutils.is_uuid_like(node_id):
             return cls.get_by_uuid(context, node_id)
+        elif utils.is_valid_logical_name(node_id):
+            return cls.get_by_name(context, node_id)
         else:
             raise exception.InvalidIdentity(identity=node_id)
 

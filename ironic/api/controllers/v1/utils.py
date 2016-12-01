@@ -427,6 +427,14 @@ def allow_remove_chassis_uuid():
             versions.MINOR_25_UNSET_CHASSIS_UUID)
 
 
+def allow_node_name_on_ports():
+    """Check if we should allow node_name to be used in API call.
+
+    Version 1.26 of API added support for node names in API call.
+    """
+    return (pecan.request.version.minor >= versions.MINOR_26_NODENAME)
+
+
 def get_controller_reserved_names(cls):
     """Get reserved names for a given controller.
 
