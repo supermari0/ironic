@@ -128,7 +128,7 @@ class Port(base.APIBase):
 
     def _set_node_name(self, value):
         if value and self._node_name != value:
-            if not api_utils.allow_node_name():
+            if not api_utils.allow_node_name_on_ports():
                 LOG.warning("The current version do not support logical names."
                             "Please use node_uuid in the request body.")
                 raise exception.NotAcceptable()
@@ -182,6 +182,10 @@ class Port(base.APIBase):
         # NOTE(lucasagomes): node_uuid is not part of objects.Port.fields
         #                    because it's an API-only attribute
         fields.append('node_uuid')
+
+        if api_utils.allow_node_name_on_ports():
+            fields.append('node_name')
+
         # NOTE: portgroup_uuid is not part of objects.Port.fields
         #                    because it's an API-only attribute
         fields.append('portgroup_uuid')
@@ -197,6 +201,10 @@ class Port(base.APIBase):
         # before saving it in the database.
         self.fields.append('node_id')
         setattr(self, 'node_uuid', kwargs.get('node_id', wtypes.Unset))
+
+        # NOTE(mariojv) Need to do the same thing for node_name
+        if api_utils.allow_node_name_on_ports():
+            setattr(self, 'node_name', kwargs.get('node_id', wtypes.Unset))
 
         # NOTE: portgroup_id is an attribute created on-the-fly
         # by _set_portgroup_uuid(), it needs to be present in the fields so
