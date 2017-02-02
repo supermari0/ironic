@@ -11,7 +11,7 @@ fi
 OS_AUTH_TOKEN=$(openstack token issue | grep ' id ' | awk '{print $4}')
 IRONIC_URL="http://127.0.0.1:6385"
 
-IRONIC_API_VERSION="1.29"
+IRONIC_API_VERSION="1.31"
 
 export OS_AUTH_TOKEN IRONIC_URL
 
@@ -91,7 +91,8 @@ GET 'v1' > api-v1-root-response.json
 ###########
 # DRIVER APIs
 GET v1/drivers > drivers-list-response.json
-GET v1/drivers/agent_ipmitool > driver-get-response.json
+GET v1/drivers?detail=true > drivers-list-detail-response.json
+GET v1/drivers/ipmi > driver-get-response.json
 GET v1/drivers/agent_ipmitool/properties > driver-property-response.json
 GET v1/drivers/agent_ipmitool/raid/logical_disk_properties > driver-logical-disk-properties-response.json
 
@@ -124,13 +125,17 @@ PATCH v1/chassis/$CID chassis-update-request.json > chassis-update-response.json
 
 # Create a node with a real driver, but missing ipmi_address,
 # then do basic commands with it
-POST v1/nodes node-create-request.json > node-create-response.json
+POST v1/nodes node-create-request-classic.json > node-create-response.json
 NID=$(cat node-create-response.json | grep '"uuid"' | sed 's/.*"\([0-9a-f\-]*\)",*/\1/')
 if [ "$NID" == "" ]; then
     exit 1
 else
     echo "Node created. UUID: $NID"
 fi
+
+# Also create a node with a dynamic driver for viewing in the node list
+# endpoint
+POST v1/nodes node-create-request-dynamic.json
 
 # get the list of passthru methods from agent* driver
 GET v1/nodes/$NID/vendor_passthru/methods > node-vendor-passthru-response.json
